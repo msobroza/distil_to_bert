@@ -187,29 +187,29 @@ batch = dataset[0]
 
 # Set model to inference mode, which is required before exporting the model because some operators behave differently in
 # inference and training mode.
-model_bert.eval()
+model_dist.eval()
 batch = tuple(t.to(device) for t in batch)
 inputs = {
     'input_ids':      batch[0].reshape(1, 128),                         # using batch size = 1 here. Adjust as needed.
-    'attention_mask': batch[1].reshape(1, 128),
-    'token_type_ids': batch[2].reshape(1, 128)
+    'attention_mask': batch[1].reshape(1, 128)#,
+    #'token_type_ids': batch[2].reshape(1, 128)
 }
 with torch.no_grad():
     symbolic_names = {0: 'batch_size', 1: 'max_seq_len'}
-    torch.onnx.export(model_bert,                                            # model being run
+    torch.onnx.export(model_dist,                                            # model being run
                       (inputs['input_ids'],                             # model input (or a tuple for multiple inputs)
-                       inputs['attention_mask'],
-                       inputs['token_type_ids']),
+                       inputs['attention_mask']),#,
+                       #inputs['token_type_ids']),
                       output_model_path,                                # where to save the model (can be a file or file-like object)
                       opset_version=11,                                 # the ONNX version to export the model to
                       do_constant_folding=True,                         # whether to execute constant folding for optimization
                       input_names=['input_ids',                         # the model's input names
-                                   'input_mask',
-                                   'segment_ids'],
+                                   'input_mask'],
+                                   #'segment_ids'],
                       output_names=['start', 'end'],                    # the model's output names
                       dynamic_axes={'input_ids': symbolic_names,        # variable length axes
                                     'input_mask' : symbolic_names,
-                                    'segment_ids' : symbolic_names,
+                                    #'segment_ids' : symbolic_names,
                                     'start' : symbolic_names,
                                     'end' : symbolic_names})
     print("Model exported at ", output_model_path)
@@ -239,18 +239,12 @@ os.environ["OMP_NUM_THREADS"] = str(psutil.cpu_count(logical=True))
 os.environ["OMP_WAIT_POLICY"] = 'PASSIVE'
 session = rt.InferenceSession(output_model_path, sess_options)
 
-res = session.run(None, {
-          'input_ids': inputs['input_ids'].cpu().numpy(),
-          'input_mask': inputs['attention_mask'].cpu().numpy(),
-          'segment_ids': inputs['token_type_ids'].cpu().numpy()
-        })
-
 # evaluate the model
 start = time.time()
 res = session.run(None, {
           'input_ids': inputs['input_ids'].cpu().numpy(),
-          'input_mask': inputs['attention_mask'].cpu().numpy(),
-          'segment_ids': inputs['token_type_ids'].cpu().numpy()
+          'input_mask': inputs['attention_mask'].cpu().numpy()#,
+          #'segment_ids': inputs['token_type_ids'].cpu().numpy()
         })
 end = time.time()
 print("ONNX Runtime inference time: ", end - start)
@@ -259,7 +253,7 @@ print("ONNX Runtime inference time: ", end - start)
 # Get perf numbers from the original PyTorch model.
 
 start = time.time()
-outputs = model_bert(**inputs)
+outputs = model_dist(**inputs)
 end = time.time()
 print("PyTorch Inference time = ", end - start)
 print("***** Verifying correctness *****")
